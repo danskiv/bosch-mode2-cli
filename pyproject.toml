@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bosch-mode2-cli"
+version = "0.1.0"
+description = "CLI monitoring application for Bosch Solution 2000 Intrusion Alarm via Mode 2 Automation Protocol"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Danas Wara", email = "danaswara64@gmail.com" }
+]
+dependencies = [
+    "bosch-alarm-mode2>=0.4.10",
+    "rich>=13.0.0",
+    "pyyaml>=6.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+bosch-mode2 = "bosch_mode2_cli.cli:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

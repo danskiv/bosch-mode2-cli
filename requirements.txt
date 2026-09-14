@@ -1,0 +1,5 @@
+bosch-alarm-mode2>=0.4.10
+rich>=13.0.0
+pyyaml>=6.0.0
+pytest>=8.0.0
+pytest-asyncio>=0.23.0

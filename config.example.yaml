@@ -1,0 +1,24 @@
+# Bosch Solution 2000 Mode 2 Monitor Configuration
+panel:
+  # Host IP or hostname of B426 / B426-M Ethernet module
+  host: "192.168.1.50"
+  
+  # Default Automation Port for Bosch Mode 2 is 7700
+  port: 7700
+
+  # User PIN Code for Solution 2000 (Numeric digits, 4 to 8 characters)
+  # NOTE: To read History Events, this user PIN must have "Master Code Functions" authority in A-Link Plus.
+  user_pin: "1234"
+
+monitor:
+  # Polling interval in seconds (default: 1.0)
+  poll_interval: 1.0
+  
+  # Fetch history log immediately upon starting
+  history_on_start: true
+
+  # Number of initial history events to retrieve
+  history_limit: 50
+
+  # Output mode: "tui" (Rich interactive dashboard) or "plain" (streaming log lines)
+  mode: "tui"
