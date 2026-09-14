@@ -20,6 +20,35 @@ from bosch_mode2_cli.models import (
 
 logger = logging.getLogger("bosch_mode2_cli.client")
 
+# Monkeypatch upstream Panel._poll to safely handle task cancellation and event loop closure
+if not getattr(Panel, "_safe_poll_patched", False):
+    async def _safe_poll(panel_self: Panel) -> None:
+        while True:
+            try:
+                await asyncio.sleep(1)
+                await panel_self._load_status()
+                panel_self._last_msg = datetime.now()
+            except (asyncio.CancelledError, GeneratorExit):
+                break
+            except RuntimeError as e:
+                err_str = str(e).lower()
+                if "no running event loop" in err_str or "event loop is closed" in err_str:
+                    break
+                logger.error("Polling exception: %s", e)
+                try:
+                    await asyncio.sleep(2)
+                except (asyncio.CancelledError, RuntimeError):
+                    break
+            except Exception as e:
+                logger.error("Polling exception: %s", e)
+                try:
+                    await asyncio.sleep(2)
+                except (asyncio.CancelledError, RuntimeError):
+                    break
+
+    Panel._poll = _safe_poll
+    setattr(Panel, "_safe_poll_patched", True)
+
 
 class BoschSol2000Client:
     """Async client managing connection, observation, and decoding for Bosch Solution 2000."""
@@ -167,6 +196,26 @@ class BoschSol2000Client:
     async def disconnect(self) -> None:
         """Disconnect cleanly from the panel."""
         if self._panel:
+            # Cancel background polling task if running
+            poll_task = getattr(self._panel, "_poll_task", None)
+            if poll_task and not poll_task.done():
+                poll_task.cancel()
+                try:
+                    await poll_task
+                except (asyncio.CancelledError, RuntimeError):
+                    pass
+                self._panel._poll_task = None
+
+            # Cancel background connection monitor task if running
+            monitor_task = getattr(self._panel, "_monitor_connection_task", None)
+            if monitor_task and not monitor_task.done():
+                monitor_task.cancel()
+                try:
+                    await monitor_task
+                except (asyncio.CancelledError, RuntimeError):
+                    pass
+                self._panel._monitor_connection_task = None
+
             await self._panel.disconnect()
         self._is_connected = False
 

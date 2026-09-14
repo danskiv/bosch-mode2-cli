@@ -399,6 +399,21 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+async def main_async(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
+    if args.command == "monitor":
+        return await cmd_monitor(args, cfg)
+    elif args.command == "history":
+        return await cmd_history(args, cfg)
+    elif args.command == "status":
+        return await cmd_status(args, cfg)
+    elif args.command == "raw":
+        return await cmd_raw(args, cfg)
+    elif args.command == "simulate":
+        return await cmd_simulate(args)
+    else:
+        return 1
+
+
 def main() -> None:
     logging.basicConfig(
         level=os.getenv("LOG_LEVEL", "WARNING"),
@@ -409,23 +424,8 @@ def main() -> None:
     args = parser.parse_args()
     cfg = load_config(args.config)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
     try:
-        if args.command == "monitor":
-            code = loop.run_until_complete(cmd_monitor(args, cfg))
-        elif args.command == "history":
-            code = loop.run_until_complete(cmd_history(args, cfg))
-        elif args.command == "status":
-            code = loop.run_until_complete(cmd_status(args, cfg))
-        elif args.command == "raw":
-            code = loop.run_until_complete(cmd_raw(args, cfg))
-        elif args.command == "simulate":
-            code = loop.run_until_complete(cmd_simulate(args))
-        else:
-            parser.print_help()
-            code = 1
+        code = asyncio.run(main_async(args, cfg))
         sys.exit(code)
     except KeyboardInterrupt:
         sys.exit(0)
