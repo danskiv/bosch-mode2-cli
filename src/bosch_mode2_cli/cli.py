@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import json
 import os
 import sys
 from pathlib import Path
@@ -21,13 +22,16 @@ from bosch_mode2_cli.history import (
     filter_transactions,
 )
 from bosch_mode2_cli.models import EventCategory
+from bosch_mode2_cli.raw_protocol import RawMode2Client
 from bosch_mode2_cli.simulator import BoschSol2000Simulator
 from bosch_mode2_cli.ui import (
     build_dashboard_layout,
     format_plain_transaction,
+    format_raw_frame_line,
     render_areas_table,
     render_header,
     render_points_table,
+    render_raw_exchange_table,
 )
 
 console = Console()
@@ -201,6 +205,72 @@ async def cmd_status(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
     return 0
 
 
+async def cmd_raw(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
+    """Read and display raw Mode 2 protocol frames and packets."""
+    panel_cfg = cfg.get("panel", {})
+    host = args.host or panel_cfg.get("host", "127.0.0.1")
+    port = args.port or panel_cfg.get("port", 7700)
+    user_pin = args.pin or panel_cfg.get("user_pin", "1234")
+
+    raw_client = RawMode2Client(host=host, port=port)
+    console.print(f"[bold cyan]Connecting raw socket to {host}:{port}...[/]")
+    try:
+        await raw_client.connect()
+    except Exception as e:
+        console.print(f"[bold red]Failed to connect raw socket:[/] {e}")
+        return 1
+
+    try:
+        if args.mode == "sniff":
+            console.print(
+                f"[bold green]✓ Sniffing live raw Mode 2 frames on {host}:{port}...[/]"
+            )
+            console.print("[dim]Press Ctrl+C to stop listening.[/]\n")
+            raw_client.on_frame = lambda f: console.print(format_raw_frame_line(f))
+            await raw_client.sniff_loop(timeout=args.timeout)
+        else:
+            # Mode: dump
+            console.print(
+                f"[bold green]✓ Executing full raw Mode 2 diagnostic sequence against {host}:{port}...[/]\n"
+            )
+            pairs = await raw_client.execute_full_diagnostic_dump(user_pin=user_pin)
+
+            if args.format == "json":
+                all_records = []
+                for tx, rx in pairs:
+                    all_records.append({
+                        "request": tx.to_dict(),
+                        "response": rx.to_dict(),
+                    })
+                print(json.dumps(all_records, indent=2))
+            elif args.format == "hexdump":
+                for i, (tx, rx) in enumerate(pairs, 1):
+                    console.print(f"[bold cyan]=== Exchange #{i}: {tx.code_name} ===[/]")
+                    console.print(f"[bold yellow]TX Frame ({len(tx.raw_bytes)} bytes):[/]")
+                    console.print(tx.hexdump)
+                    console.print(f"[bold green]RX Frame ({len(rx.raw_bytes)} bytes) - {rx.code_name}:[/]")
+                    console.print(rx.hexdump)
+                    console.print(f"[dim]Interpretation:[/] {rx.decoded_info}\n")
+            else:
+                # Table format
+                table = render_raw_exchange_table(pairs)
+                console.print(table)
+
+            if args.save:
+                out_path = Path(args.save)
+                with open(out_path, "w", encoding="utf-8") as f:
+                    data = [{"request": tx.to_dict(), "response": rx.to_dict()} for tx, rx in pairs]
+                    json.dump(data, f, indent=2)
+                console.print(f"\n[green]Saved raw capture to:[/] {out_path}")
+
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        console.print("\n[yellow]Raw session terminated.[/]")
+    finally:
+        await raw_client.close()
+
+    return 0
+
+
 async def cmd_simulate(args: argparse.Namespace) -> int:
     """Run built-in Solution 2000 Mode 2 mock server."""
     port = args.port
@@ -300,6 +370,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_stat.add_argument("-p", "--port", type=int, help="Panel Mode 2 port")
     p_stat.add_argument("--pin", help="User PIN code")
 
+    # Command: raw
+    p_raw = subparsers.add_parser("raw", help="Inspect and display raw Mode 2 protocol packets")
+    p_raw.add_argument("--host", help="Panel IP address / hostname")
+    p_raw.add_argument("-p", "--port", type=int, help="Panel Mode 2 port")
+    p_raw.add_argument("--pin", help="User PIN code")
+    p_raw.add_argument(
+        "--mode", choices=["dump", "sniff"], default="dump", help="dump all endpoints or sniff live (default: dump)"
+    )
+    p_raw.add_argument(
+        "--format", choices=["table", "hexdump", "json"], default="table", help="Output format"
+    )
+    p_raw.add_argument("--save", help="Path to save raw capture as JSON")
+    p_raw.add_argument("--timeout", type=float, help="Sniffing timeout in seconds")
+
     # Command: simulate
     p_sim = subparsers.add_parser("simulate", help="Start local Solution 2000 mock server")
     p_sim.add_argument("--bind", default="127.0.0.1", help="Bind IP address (default: 127.0.0.1)")
@@ -335,6 +419,8 @@ def main() -> None:
             code = loop.run_until_complete(cmd_history(args, cfg))
         elif args.command == "status":
             code = loop.run_until_complete(cmd_status(args, cfg))
+        elif args.command == "raw":
+            code = loop.run_until_complete(cmd_raw(args, cfg))
         elif args.command == "simulate":
             code = loop.run_until_complete(cmd_simulate(args))
         else:

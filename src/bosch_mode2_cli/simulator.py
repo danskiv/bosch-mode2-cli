@@ -37,6 +37,8 @@ class BoschSol2000Simulator:
         self.user_pin = user_pin
         self._server: Optional[asyncio.Server] = None
         self._is_running = False
+        self._clients: set[asyncio.StreamWriter] = set()
+        self.raw_log_enabled = False
 
         # Panel state
         # Area 1: 0x04 = Disarmed, 0x01 = Away Armed, 0x03 = Stay 1
@@ -104,6 +106,7 @@ class BoschSol2000Simulator:
     ) -> None:
         addr = writer.get_extra_info("peername")
         logger.info("Simulator: Client connected from %s", addr)
+        self._clients.add(writer)
         try:
             while self._is_running:
                 # Mode 2 Basic Protocol Frame Header:
@@ -132,9 +135,28 @@ class BoschSol2000Simulator:
         except Exception as e:
             logger.error("Simulator client error: %s", e)
         finally:
+            self._clients.discard(writer)
             writer.close()
-            await writer.wait_closed()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
             logger.info("Simulator: Client disconnected from %s", addr)
+
+    async def broadcast_unsolicited(self, payload: bytes) -> None:
+        """Broadcast an unsolicited Protocol 0x02 subscription push event to all connected clients."""
+        frame = bytearray([0x02])
+        frame.extend(len(payload).to_bytes(2, "big"))
+        frame.extend(payload)
+        frame_bytes = bytes(frame)
+
+        for w in list(self._clients):
+            try:
+                w.write(frame_bytes)
+                await w.drain()
+            except Exception as e:
+                logger.debug("Failed to write unsolicited event to client: %s", e)
+                self._clients.discard(w)
 
     def _frame_ack(self) -> bytes:
         # Protocol 1, Length 1, 0xFC (ACK)
@@ -201,6 +223,23 @@ class BoschSol2000Simulator:
             st[5] = 0  # Faults bitmap high
             st[6] = 0  # Faults bitmap low (no faults)
             return self._frame_result(bytes(st))
+
+        # 0x12: CMD.REQUEST_DATE_TIME
+        if cmd == 0x12:
+            now = datetime.now()
+            dt_bytes = bytes([
+                now.month,
+                now.day,
+                now.year - 2000,
+                now.hour,
+                now.minute,
+                now.second,
+            ])
+            return self._frame_result(dt_bytes)
+
+        # 0x08: CMD.ALARM_MEMORY_SUMMARY
+        if cmd == 0x08:
+            return self._frame_result(bytes([0x00] * 8))
 
         # 0x24: CMD.REQUEST_CONFIGURED_AREAS
         if cmd == 0x24:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Any, Dict, List, Tuple
 
 from rich.align import Align
 from rich.box import ROUNDED
@@ -144,3 +144,66 @@ def build_dashboard_layout(
 def format_plain_transaction(record: TransactionRecord) -> str:
     """Format single transaction for plain text stream."""
     return f"[{record.formatted_time}] #{record.id} [{record.category.value:^10}] {record.message}"
+
+
+def format_raw_frame_line(frame: Any) -> str:
+    """Single-line formatted string for live raw packet sniffing."""
+    dir_badge = (
+        "[bold cyan]TX >>[/]"
+        if frame.direction == "TX"
+        else "[bold magenta]<< RX[/]"
+    )
+    code_str = f"[{frame.code_name:^18}]"
+    hex_preview = frame.hex_str
+    if len(hex_preview) > 48:
+        hex_preview = hex_preview[:45] + "..."
+
+    return (
+        f"[dim]{frame.formatted_time}[/] {dir_badge} {code_str} "
+        f"P:{frame.protocol} L:{frame.length:02d} | [yellow]{hex_preview}[/] | [dim]{frame.decoded_info}[/]"
+    )
+
+
+def render_raw_exchange_table(
+    pairs: List[Tuple[Any, Any]], title: str = "Mode 2 Raw Protocol Full Diagnostic Dump"
+) -> Table:
+    """Render comprehensive table of request-response raw frame exchanges."""
+    table = Table(
+        title=f"[bold cyan]{title}[/]",
+        box=ROUNDED,
+        show_header=True,
+        header_style="bold magenta",
+        expand=True,
+    )
+    table.add_column("#", justify="center", width=3, style="dim")
+    table.add_column("Command / Endpoint", style="bold cyan", width=24)
+    table.add_column("TX Hex Frame", style="yellow", width=22)
+    table.add_column("RX Status", justify="center", width=12)
+    table.add_column("RX Hex (Payload Sample)", style="green")
+    table.add_column("Interpretation", style="white")
+
+    for i, (tx, rx) in enumerate(pairs, 1):
+        # Status styling
+        if rx.code == 0xFC:
+            status_style = "[bold green]ACK (0xFC)[/]"
+        elif rx.code == 0xFD:
+            status_style = "[bold red]NACK (0xFD)[/]"
+        elif rx.code == 0xFE:
+            status_style = "[bold blue]RESULT (0xFE)[/]"
+        else:
+            status_style = f"[magenta]0x{rx.code:02X}[/]" if rx.code else "[dim]PUSH[/]"
+
+        rx_hex = rx.hex_str
+        if len(rx_hex) > 36:
+            rx_hex = rx_hex[:33] + "..."
+
+        table.add_row(
+            str(i),
+            tx.code_name,
+            tx.hex_str,
+            status_style,
+            rx_hex,
+            rx.decoded_info,
+        )
+
+    return table

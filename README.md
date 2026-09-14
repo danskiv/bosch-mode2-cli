@@ -89,7 +89,23 @@ bosch-mode2 history --host 192.168.1.50 --pin 1234 --format csv > events.csv
 bosch-mode2 status --host 192.168.1.50 --pin 1234
 ```
 
-### 4. Running the Local Panel Simulator
+### 4. Raw Protocol Inspector & Sniffer (`raw`)
+Inspect raw Mode 2 hex frames, diagnostic requests, and response packets:
+```bash
+# Full diagnostic dump of all panel endpoints with raw request/response frames
+bosch-mode2 raw --host 192.168.1.50 --pin 1234
+
+# View full hex dump with offset and ASCII breakdown
+bosch-mode2 raw --host 192.168.1.50 --pin 1234 --format hexdump
+
+# Export all raw exchanges as JSON
+bosch-mode2 raw --host 192.168.1.50 --pin 1234 --format json --save raw_dump.json
+
+# Live raw packet sniffer (passively listens and displays incoming raw frames)
+bosch-mode2 raw --host 192.168.1.50 --pin 1234 --mode sniff
+```
+
+### 5. Running the Local Panel Simulator
 You can simulate a Solution 2000 panel on `127.0.0.1:7700` without any physical panel:
 ```bash
 # Start simulator on port 7700 with periodic zone activity
