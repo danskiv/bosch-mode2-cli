@@ -18,15 +18,44 @@ class EventCategory(str, Enum):
 def categorize_event(message: str) -> EventCategory:
     """Categorize Bosch event message into standard security classifications."""
     msg = message.upper()
-    if "ALARM RESTORE" in msg or "TROUBLE RESTORE" in msg or "RESTORE" in msg:
+    if "RESTORE" in msg:
         return EventCategory.RESTORE
-    if "ALARM" in msg or "BURGLARY" in msg or "PANIC" in msg or "FIRE" in msg:
-        return EventCategory.ALARM
-    if any(k in msg for k in ["ARMED", "DISARMED", "ARM AWAY", "ARM STAY", "STAY1"]):
+    if any(k in msg for k in ["AWAY ARM", "STAY1 ARM", "STAY2 ARM", "DISARM", "ARMED", "DISARMED"]):
         return EventCategory.ARM_DISARM
-    if any(k in msg for k in ["TROUBLE", "FAULT", "TAMPER", "FAIL", "BATTERY LOW", "AC FAIL"]):
+    if any(k in msg for k in ["ALARM", "PANIC", "FIRE", "DURESS", "HOLD-UP", "BURGLARY", "MEDICAL"]):
+        return EventCategory.ALARM
+    if any(
+        k in msg
+        for k in [
+            "TROUBLE",
+            "FAULT",
+            "TAMPER",
+            "FAIL",
+            "LOW BATTERY",
+            "BATTERY LOW",
+            "AC FAIL",
+            "AC POWER FAIL",
+            "MISSING",
+            "JAMMING",
+            "LOCKED",
+            "OVER CURRENT",
+        ]
+    ):
         return EventCategory.TROUBLE
-    if any(k in msg for k in ["RESET", "SYSTEM", "TEST", "TIME", "PROGRAMMING"]):
+    if any(
+        k in msg
+        for k in [
+            "RESET",
+            "SYSTEM",
+            "TEST",
+            "CLOCK",
+            "TIME",
+            "PROGRAM",
+            "SERVICE MODE",
+            "WALK TEST",
+            "BYPASS",
+        ]
+    ):
         return EventCategory.SYSTEM
     return EventCategory.UNKNOWN
 

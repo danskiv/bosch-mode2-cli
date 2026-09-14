@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("bosch_mode2_cli.simulator")
@@ -57,49 +57,125 @@ class BoschSol2000Simulator:
             8: {"name": "Emergency Panic", "status": 0x03},
         }
 
-        # History events list (tuple: dt, code, zone_or_area, user)
-        self.history_events: List[bytes] = [
-            encode_sol2000_history_event(
-                datetime(2026, 9, 14, 8, 0, 0), 11, 1, 1  # Disarmed by User 1
-            ),
-            encode_sol2000_history_event(
-                datetime(2026, 9, 14, 8, 15, 22), 1, 1, 0  # Zone 1 Alarm
-            ),
-            encode_sol2000_history_event(
-                datetime(2026, 9, 14, 8, 16, 5), 2, 1, 0  # Zone 1 Alarm Restore
-            ),
-            encode_sol2000_history_event(
-                datetime(2026, 9, 14, 9, 30, 0), 10, 1, 1  # Armed Away by User 1
-            ),
-            encode_sol2000_history_event(
-                datetime(2026, 9, 14, 12, 0, 0), 11, 1, 2  # Disarmed by User 2
-            ),
+        # Populate realistic history of Solution 2000 events (35+ records across all 8 zones and categories)
+        self.history_records: Dict[int, bytes] = {}
+        base_time = datetime(2026, 9, 13, 8, 0, 0)
+
+        # Initial seed of events: (delta_minutes, event_code, zone_or_area, user)
+        initial_event_specs = [
+            (0, 0, 0, 0),        # System Reset
+            (15, 110, 0, 1),     # User 1 / A-Link Set Clock
+            (60, 47, 1, 1),      # User 1 Area 1 AWAY Arm
+            (95, 1, 1, 0),       # Zone 1 Alarm (Front Door)
+            (96, 2, 1, 0),       # Zone 1 Alarm Restore
+            (102, 1, 2, 0),      # Zone 2 Alarm (Living PIR)
+            (103, 2, 2, 0),      # Zone 2 Alarm Restore
+            (120, 50, 1, 1),     # User 1 Area 1 Disarm
+            (240, 48, 1, 2),     # User 2 Area 1 STAY1 Arm
+            (280, 3, 4, 0),      # Zone 4 Trouble (Kitchen Window)
+            (285, 4, 4, 0),      # Zone 4 Trouble Restore
+            (360, 50, 1, 2),     # User 2 Area 1 Disarm
+            (420, 67, 0, 0),     # AC Power Fail (PLN outage)
+            (450, 69, 0, 0),     # System Low Battery
+            (480, 68, 0, 0),     # AC Power Restore (PLN recovered)
+            (500, 70, 0, 0),     # System Battery Restore
+            (600, 5, 5, 1),      # Zone 5 Bypass (Back Door)
+            (630, 6, 5, 1),      # Zone 5 UnBypass
+            (720, 37, 7, 0),     # 24Hr Fire Zone 7 Alarm (Smoke Detector)
+            (725, 38, 7, 0),     # 24Hr Fire Zone 7 Alarm Restore
+            (840, 25, 8, 0),     # 24Hr Panic Zone 8 Alarm (Emergency Panic)
+            (842, 26, 8, 0),     # 24Hr Panic Zone 8 Alarm Restore
+            (900, 73, 0, 0),     # Panel Tamper
+            (905, 74, 0, 0),     # Panel Tamper Restore
+            (960, 65, 1, 0),     # Codepad 1 Medical
+            (1020, 1, 3, 0),     # Zone 3 Alarm (Master Bedroom PIR)
+            (1022, 2, 3, 0),     # Zone 3 Alarm Restore
+            (1080, 1, 6, 0),     # Zone 6 Alarm (Garage PIR)
+            (1082, 2, 6, 0),     # Zone 6 Alarm Restore
+            (1140, 118, 0, 0),   # Comm Auto Test
+            (1200, 107, 0, 0),   # Walk Test Begin
+            (1220, 108, 0, 0),   # Walk Test End
+            (1300, 47, 1, 1),    # User 1 Area 1 AWAY Arm
+            (1350, 1, 1, 0),     # Zone 1 Alarm (Front Door)
+            (1352, 2, 1, 0),     # Zone 1 Alarm Restore
+            (1400, 50, 1, 1),    # User 1 Area 1 Disarm
         ]
-        self._next_event_id = len(self.history_events) + 100
+
+        cur_id = 101
+        for delta_min, code, zone_or_area, user in initial_event_specs:
+            evt_time = base_time + timedelta(minutes=delta_min)
+            raw = encode_sol2000_history_event(evt_time, code, zone_or_area, user)
+            self.history_records[cur_id] = raw
+            cur_id += 1
+
+        self._next_event_id = cur_id
+
+    @property
+    def history_events(self) -> List[bytes]:
+        """Expose raw event byte chunks for compatibility."""
+        return list(self.history_records.values())
+
+    def add_history_event(
+        self, code: int, zone_or_area: int = 0, user: int = 0, dt: Optional[datetime] = None
+    ) -> int:
+        """Append a new history transaction event to the panel log."""
+        eid = self._next_event_id
+        timestamp = dt or datetime.now()
+        raw = encode_sol2000_history_event(timestamp, code, zone_or_area, user)
+        self.history_records[eid] = raw
+        self._next_event_id += 1
+        return eid
 
     def trigger_point(self, point_id: int, is_open: bool) -> None:
-        """Simulate point state change."""
+        """Simulate point state change and append corresponding history event."""
         if point_id in self.points:
             self.points[point_id]["status"] = 0x02 if is_open else 0x03
-            # Add transaction event
-            code = 1 if is_open else 2
-            evt = encode_sol2000_history_event(
-                datetime.now(), code, point_id, 0
-            )
-            self.history_events.append(evt)
-            self._next_event_id += 1
+            # Special 24Hr zones: Zone 7 Fire, Zone 8 Panic
+            if point_id == 7:
+                code = 37 if is_open else 38  # 24Hr Fire Alarm / Restore
+            elif point_id == 8:
+                code = 25 if is_open else 26  # 24Hr Panic Alarm / Restore
+            else:
+                code = 1 if is_open else 2    # Zone Alarm / Restore
+            self.add_history_event(code=code, zone_or_area=point_id, user=0)
 
     def trigger_area(self, area_id: int, status: int, user_id: int = 1) -> None:
         """Simulate area arm/disarm."""
         if area_id in self.areas:
             self.areas[area_id]["status"] = status
-            # 0x01 = Away, 0x03 = Stay 1, 0x04 = Disarmed
-            code = 10 if status == 0x01 else (12 if status == 0x03 else 11)
-            evt = encode_sol2000_history_event(
-                datetime.now(), code, area_id, user_id
-            )
-            self.history_events.append(evt)
-            self._next_event_id += 1
+            # 0x01 = Away (Code 47), 0x03 = Stay 1 (Code 48), 0x04 = Disarmed (Code 50)
+            if status == 0x01:
+                code = 47
+            elif status == 0x03:
+                code = 48
+            else:
+                code = 50
+            self.add_history_event(code=code, zone_or_area=area_id, user=user_id)
+
+    def trigger_trouble(self, point_id: int, is_trouble: bool) -> None:
+        """Simulate zone trouble (wiring fault, open circuit)."""
+        code = 3 if is_trouble else 4
+        self.add_history_event(code=code, zone_or_area=point_id, user=0)
+
+    def trigger_bypass(self, point_id: int, is_bypassed: bool, user_id: int = 1) -> None:
+        """Simulate zone bypass/unbypass."""
+        code = 5 if is_bypassed else 6
+        self.add_history_event(code=code, zone_or_area=point_id, user=user_id)
+
+    def trigger_ac_power(self, is_fail: bool) -> None:
+        """Simulate AC mains power loss / restore."""
+        code = 67 if is_fail else 68
+        self.add_history_event(code=code, zone_or_area=0, user=0)
+
+    def trigger_battery(self, is_low: bool) -> None:
+        """Simulate battery low / restore."""
+        code = 69 if is_low else 70
+        self.add_history_event(code=code, zone_or_area=0, user=0)
+
+    def trigger_tamper(self, is_tamper: bool) -> None:
+        """Simulate panel enclosure tamper."""
+        code = 73 if is_tamper else 74
+        self.add_history_event(code=code, zone_or_area=0, user=0)
 
     async def _handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -299,20 +375,20 @@ class BoschSol2000Simulator:
         if cmd == 0x15:
             # Request: 1 byte count (0xFF), 4 bytes start_event_id
             start_id = int.from_bytes(data[1:5], "big")
-            logger.debug("Simulator: History request start_id=%d", start_id)
+            logger.debug("Simulator: History request start_id=%d, next_id=%d", start_id, self._next_event_id)
             if start_id >= 0xFFFFFFFF or start_id >= self._next_event_id:
                 # Discovery of max event ID: return count=0, start_id=current_max
                 res = bytearray([0])
                 res.extend((self._next_event_id).to_bytes(4, "big"))
                 return self._frame_result(bytes(res))
 
-            # Return available events starting from start_id
-            events_to_send = self.history_events[-5:]  # send up to 5 events
-            count = len(events_to_send)
+            # Return available events with ID > start_id (up to 30 events)
+            matching_ids = [eid for eid in sorted(self.history_records.keys()) if eid > start_id][:30]
+            count = len(matching_ids)
             res = bytearray([count])
             res.extend((start_id).to_bytes(4, "big"))
-            for evt in events_to_send:
-                res.extend(evt)
+            for eid in matching_ids:
+                res.extend(self.history_records[eid])
             return self._frame_result(bytes(res))
 
         # Default ACK for any other command

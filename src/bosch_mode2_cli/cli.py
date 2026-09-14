@@ -289,19 +289,74 @@ async def cmd_simulate(args: argparse.Namespace) -> int:
     )
 
     async def auto_event_loop():
-        """Optionally trigger periodic simulated events."""
-        point_id = 1
-        is_open = True
+        """Trigger realistic, diverse periodic simulated events across all 8 zones and categories."""
+        scenarios = [
+            # 1. Front Door intrusion (Zone 1)
+            {"action": "point", "pid": 1, "open": True, "desc": "Zone 1 (Front Door) OPENED -> Alarm"},
+            {"action": "point", "pid": 1, "open": False, "desc": "Zone 1 (Front Door) CLOSED -> Normal Restore"},
+            # 2. Living PIR detection (Zone 2)
+            {"action": "point", "pid": 2, "open": True, "desc": "Zone 2 (Living PIR) MOTION -> Alarm"},
+            {"action": "point", "pid": 2, "open": False, "desc": "Zone 2 (Living PIR) RESTORED -> Normal"},
+            # 3. Master Bedroom PIR (Zone 3)
+            {"action": "point", "pid": 3, "open": True, "desc": "Zone 3 (Master Bedroom) MOTION -> Alarm"},
+            {"action": "point", "pid": 3, "open": False, "desc": "Zone 3 (Master Bedroom) RESTORED -> Normal"},
+            # 4. Kitchen Window Trouble / Tamper (Zone 4)
+            {"action": "trouble", "pid": 4, "trouble": True, "desc": "Zone 4 (Kitchen Window) LOOP TROUBLE / FAULT"},
+            {"action": "trouble", "pid": 4, "trouble": False, "desc": "Zone 4 (Kitchen Window) TROUBLE RESTORED"},
+            # 5. Back Door Bypass (Zone 5)
+            {"action": "bypass", "pid": 5, "bypass": True, "desc": "Zone 5 (Back Door) BYPASSED by User 1"},
+            {"action": "bypass", "pid": 5, "bypass": False, "desc": "Zone 5 (Back Door) UNBYPASS (Active)"},
+            # 6. Garage PIR detection (Zone 6)
+            {"action": "point", "pid": 6, "open": True, "desc": "Zone 6 (Garage PIR) MOTION -> Alarm"},
+            {"action": "point", "pid": 6, "open": False, "desc": "Zone 6 (Garage PIR) RESTORED -> Normal"},
+            # 7. Smoke Detector 24Hr Fire Alarm (Zone 7)
+            {"action": "point", "pid": 7, "open": True, "desc": "Zone 7 (Smoke Detector) 24Hr FIRE ALARM TRIGGERED!"},
+            {"action": "point", "pid": 7, "open": False, "desc": "Zone 7 (Smoke Detector) 24Hr FIRE ALARM RESTORED"},
+            # 8. Emergency Panic Button Alarm (Zone 8)
+            {"action": "point", "pid": 8, "open": True, "desc": "Zone 8 (Emergency Panic) 24Hr PANIC ALARM TRIGGERED!"},
+            {"action": "point", "pid": 8, "open": False, "desc": "Zone 8 (Emergency Panic) 24Hr PANIC RESTORED"},
+            # 9. Arming & Disarming Sequence
+            {"action": "area", "status": 0x01, "desc": "Area 1 ARMED AWAY by User 1"},
+            {"action": "point", "pid": 1, "open": True, "desc": "Zone 1 (Front Door) OPENED while Armed!"},
+            {"action": "point", "pid": 1, "open": False, "desc": "Zone 1 (Front Door) CLOSED"},
+            {"action": "area", "status": 0x04, "desc": "Area 1 DISARMED by User 1"},
+            # 10. AC Power & System Events
+            {"action": "ac_power", "fail": True, "desc": "AC Mains Power Failure (PLN Outage)"},
+            {"action": "battery", "low": True, "desc": "System Battery Voltage Low"},
+            {"action": "ac_power", "fail": False, "desc": "AC Mains Power Restored"},
+            {"action": "battery", "low": False, "desc": "System Battery Restored"},
+            # 11. Tamper & Auto Test
+            {"action": "tamper", "tamper": True, "desc": "Panel Enclosure Tamper Switch Triggered"},
+            {"action": "tamper", "tamper": False, "desc": "Panel Tamper Restored"},
+            {"action": "event", "code": 118, "desc": "Comm Auto Test Report Sent"},
+        ]
+
+        idx = 0
         while True:
             await asyncio.sleep(args.auto_interval)
-            sim.trigger_point(point_id, is_open)
-            state_str = "OPEN / ALARM" if is_open else "RESTORED / NORMAL"
+            step = scenarios[idx]
+            act = step["action"]
+            if act == "point":
+                sim.trigger_point(step["pid"], step["open"])
+            elif act == "trouble":
+                sim.trigger_trouble(step["pid"], step["trouble"])
+            elif act == "bypass":
+                sim.trigger_bypass(step["pid"], step["bypass"])
+            elif act == "area":
+                sim.trigger_area(1, step["status"])
+            elif act == "ac_power":
+                sim.trigger_ac_power(step["fail"])
+            elif act == "battery":
+                sim.trigger_battery(step["low"])
+            elif act == "tamper":
+                sim.trigger_tamper(step["tamper"])
+            elif act == "event":
+                sim.add_history_event(code=step["code"])
+
             console.print(
-                f"[dim][Sim Event][/] Zone {point_id} changed to {state_str}"
+                f"[dim][Sim Event #{sim._next_event_id - 1}][/] [bold yellow]{step['desc']}[/]"
             )
-            is_open = not is_open
-            if not is_open:
-                point_id = (point_id % 4) + 1
+            idx = (idx + 1) % len(scenarios)
 
     auto_task = None
     if args.auto_events:
