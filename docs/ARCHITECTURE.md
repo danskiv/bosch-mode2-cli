@@ -2,7 +2,9 @@
 
 ## Purpose
 
-`bosch-mode2-cli` is a read-oriented command-line monitor for Bosch Solution 2000/3000 panels connected through a B426/B426-M IP module. It uses the Mode 2 protocol over the configured TCP/TLS transport and presents panel state and event history in a terminal.
+`bosch-mode2-cli` is a read-oriented command-line monitor for Bosch Solution 2000 and Solution 3000 panels connected through a B426/B426-M IP module. It uses the Mode 2 protocol over the configured TCP/TLS transport and presents panel state and event history in a terminal.
+
+The compatibility claim is deliberately limited. Solution 2000 is the validated development target. Solution 3000 is a theoretical target because the upstream library maps model code `0x21` to the same Solution family; the repository does not yet contain a physical Solution 3000 validation run.
 
 The project is an engineering companion, not a replacement for the Bosch panel, B426, A-Link Plus, monitoring center, or alarm signaling path.
 
@@ -43,7 +45,7 @@ Solution 2000/3000 panel
 | `history.py` | History event conversion, filtering, table/JSON/CSV export |
 | `models.py` | Typed records for panel snapshots, areas, points, and transactions |
 | `raw_protocol.py` | Mode 2 frame parser, frame builder, raw client, diagnostic exchanges |
-| `simulator.py` | Local Solution 2000-compatible test server and event generator |
+| `simulator.py` | Local Solution 2000-compatible test server and event generator; not a Solution 3000 test harness |
 | `ui.py` | Rich tables, dashboard layout, and plain event formatting |
 
 ## Connection Flow

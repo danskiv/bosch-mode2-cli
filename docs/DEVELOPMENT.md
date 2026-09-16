@@ -67,6 +67,8 @@ The simulator exercises identity, authentication, status, history, point updates
 - Preserve the distinction between TCP, TLS, Mode 2 identity, authentication, status, and history.
 - Do not infer authentication success from an open port or TLS handshake.
 - Keep Solution 2000/3000 behavior separate from B/G and B426-M assumptions.
+- Treat Solution 3000 as theoretical compatibility until a physical panel test records identity, authentication, status, history, and event-delivery results.
+- Do not call the Solution 2000 simulator a Solution 3000 validation.
 - Do not add arm/disarm, output, date/time, or configuration commands to a monitor without a separate safety review.
 - Treat `SET_SUBSCRIPTION` and callbacks as event delivery mechanisms, not proof of universal realtime behavior.
 - A laptop notification is not an alarm signaling path; never describe the CLI as a siren controller.

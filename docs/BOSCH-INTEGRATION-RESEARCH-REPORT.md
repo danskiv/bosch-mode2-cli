@@ -41,6 +41,15 @@ The official Bosch integration-tools page explicitly tells developers to choose 
 
 The current Solution 2000/3000 installation manual identifies Ethernet communication modules as accessories and describes the network module as supporting remote administration/control, mobile applications, and building-automation/integration applications [1]. The same manual distinguishes the B426-M/B450-M configuration path and documents panel capacity and module addressing for the Solution family [1]. A separate Bosch setup guide describes the B426 IP-module installation flow: power down before wiring, temporarily use the module's configuration address/mode, enable the panel network module, configure the B426 web/network settings, enable Web & Automation Security, and then return the module to its operating address/mode [10].
 
+The evidence boundary for this repository is:
+
+| Target | Current status | Basis | Missing evidence |
+|---|---|---|---|
+| Solution 2000 | Validated development target | Project simulator and current field investigation use model code `0x20`. | Firmware-specific behavior still requires separate confirmation. |
+| Solution 3000 | Theoretical compatibility | The upstream Mode 2 model map identifies `0x21` as Solution 3000 and groups it with the Solution family. | Physical identity, authentication, status, history, and live-event results from a Solution 3000 installation. |
+
+The second row is a testable engineering hypothesis, not a production-support claim. The simulator does not validate Solution 3000.
+
 This creates an important model distinction:
 
 - **Standard B426** and **B426-M** are not safe substitutes in a configuration table.

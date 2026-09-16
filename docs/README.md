@@ -7,3 +7,4 @@
 - [Project Audit](PROJECT-AUDIT.md) — cleanup findings, moves, verification, and remaining review items.
 - [Mode 2 Protocol Specification](BOSCH-MODE2-PROTOCOL-SPEC.md) — frame and command reference.
 - [Integration Research Report](BOSCH-INTEGRATION-RESEARCH-REPORT.md) — sourced Bosch/B426 integration research and unresolved limitations.
+- Compatibility status: Solution 2000 is the validated development target; Solution 3000 is theoretical compatibility pending a physical validation run.

@@ -1,6 +1,8 @@
 # Bosch Intrusion Integration Protocol (Mode 2) — Technical Reference Specification
 
-This document provides a comprehensive engineering guide to the **Bosch Mode 2 Automation Protocol**, used by Bosch intrusion control panels (Solution 2000/3000, AMAX Series, and B/G Series) for third-party automation, BMS, PSIM, and monitoring integrations.
+This document is an engineering reference for the **Bosch Mode 2 Automation Protocol**. It covers command and frame details relevant to Bosch intrusion integrations, but it is not a blanket compatibility certification for every panel, firmware, B426 variant, or command.
+
+For this project, Solution 2000 is the validated development target. Solution 3000 is a theoretical compatibility target because the upstream model map identifies model code `0x21` as Solution 3000 and groups it with Solution panels. A physical Solution 3000 installation must be tested separately.
 
 ---
 
@@ -123,8 +125,8 @@ Byte 3..N: Response Data Payload
    * **Byte 13:** Panel Busy Flag.
    * **Bytes 23..56:** Capability Bitmask (declares support for subscriptions, serial reading, CF01 vs CF03 text format, etc.).
 
-### 4.2 Authentication on Solution 2000 (`CMD_LOGIN_REMOTE_USER - 0x3E`)
-* Solution 2000 encodes the user PIN as 4 bytes in BCD/Hex padded with `0xF`.
+### 4.2 Authentication on Solution 2000/3000 (`CMD_LOGIN_REMOTE_USER - 0x3E`)
+* The current implementation treats Solution-family authentication as a numeric user code encoded into 4 bytes in BCD/Hex and padded with `0xF` nibbles. This is implementation evidence, not a claim that every Solution firmware has identical behavior.
 * **Illustrative local PIN:** use a locally entered numeric PIN; do not place a real PIN in documentation, source, or command history.
   * The implementation pads the entered value with `F` nibbles to four bytes.
   * Complete TX Frame shape: `01 05 3E <4-byte padded PIN>`
@@ -163,9 +165,9 @@ Response pairs: `[Point_ID: 2 bytes Big-Endian] [Status_Byte: 1 byte]`
 
 ---
 
-## 6. History Transaction Log Encoding (Solution 2000)
+## 6. History Transaction Log Encoding (Solution 2000 development path)
 
-On Solution 2000, each history record returned by `0x15` is an **8-byte packed binary structure**:
+The current parser and simulator use the Solution 2000 **8-byte packed binary structure** returned by `0x15`. Do not assume the same record layout on Solution 3000 without a physical capture or matching documentation:
 
 | Offset | Size | Name | Description |
 | :---: | :---: | :--- | :--- |

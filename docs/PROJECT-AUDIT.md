@@ -46,6 +46,8 @@ The supported application surface is:
 
 There are no retained diagnostic or portable-release directories in the repository after this cleanup.
 
+The compatibility statement is intentionally narrower than the project name: Solution 2000 is the validated development target. Solution 3000 is a theoretical compatibility target identified by the upstream model map (`0x21`) and still needs a physical validation run before production use.
+
 ## Verification
 
 The last full runtime verification before the final deletion-only cleanup was:

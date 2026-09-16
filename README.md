@@ -1,6 +1,8 @@
-# Bosch Solution 2000 Mode 2 Monitoring CLI
+# Bosch Solution 2000/3000 Mode 2 Monitoring CLI
 
-A read-oriented command-line monitor for Bosch Solution 2000/3000 intrusion panels connected through a B426/B426-M IP module.
+A read-oriented command-line monitor for Bosch Solution 2000 and Solution 3000 intrusion panels connected through a B426/B426-M IP module.
+
+The project currently has two different evidence levels: Solution 2000 is the validated development target; Solution 3000 is a theoretical compatibility target based on the shared Mode 2 implementation and model code `0x21`. A Solution 3000 installation still requires hardware validation for its panel firmware, network module, transport mode, authentication, history access, and event delivery.
 
 The application can display panel identity, areas, points/zones, faults, event history, and live status/event updates through a Rich dashboard or plain-text stream. It is intended for controlled engineering and monitoring workflows; it does not replace the panel, B426, A-Link Plus, monitoring center, or siren path.
 
@@ -10,7 +12,7 @@ The application can display panel identity, areas, points/zones, faults, event h
 - Display live point/area/event updates in a terminal.
 - Export history as table, JSON, or CSV.
 - Inspect raw Mode 2 frames through the `raw` command.
-- Run a local Solution 2000 simulator for development and tests.
+- Run a local Solution 2000 simulator for development and tests. The simulator is not a Solution 3000 validation tool.
 - Use TLS by default for the observed B426 field transport, with explicit plain-TCP override where appropriate.
 - Configure B426 IP, port, and visible user code through a local wizard.
 
@@ -29,6 +31,15 @@ The application can display panel identity, areas, points/zones, faults, event h
 - Windows 10/11 or Linux.
 - A routed connection from the laptop to the B426.
 - An authorized maintenance/testing window for physical-panel work.
+
+## Compatibility Status
+
+| Panel | Evidence level | What this means |
+|---|---|---|
+| Solution 2000 | Validated development target | The project simulator and current field investigation use the Solution 2000 path. This does not certify every B426 firmware combination. |
+| Solution 3000 | Theoretical compatibility | The upstream Mode 2 model map identifies `0x21` as Solution 3000 and places it in the Solution family. A physical Solution 3000 test is still required before production use. |
+
+The shared protocol path is a reason to test Solution 3000, not proof that every command behaves identically on every firmware. Keep Solution 2000, Solution 3000, B426, and B426-M evidence separate.
 
 ## Installation
 
@@ -113,9 +124,10 @@ The simulator-backed tests do not contact a physical alarm panel.
 ## Current Protocol Notes
 
 - Solution 2000 model code: `0x20`.
+- Solution 3000 model code: `0x21`.
 - Default Mode 2 port: `7700`.
 - Solution user authentication uses the numeric code entered through the wizard or explicit CLI override.
 - Event delivery is hybrid: subscription callbacks where supported plus periodic status refresh; “realtime” must not be interpreted as guaranteed push for every entity.
 - History retrieval may require the configured user to have `Master Code Functions` authority and may be skipped while areas are armed.
 
-See the protocol specification and sourced research report for detailed evidence, caveats, and unresolved model/firmware differences.
+See the protocol specification and sourced research report for evidence, caveats, and unresolved model/firmware differences. Do not read the model list as a production certification.

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "bosch-mode2-cli"
 dynamic = ["version"]
-description = "CLI monitoring application for Bosch Solution 2000 Intrusion Alarm via Mode 2 Automation Protocol"
+description = "CLI monitoring application for Bosch Solution 2000/3000 intrusion alarms via Mode 2 Automation Protocol"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [

@@ -8,7 +8,7 @@
 - A maintenance window and authorization for the panel test
 - A-Link Plus and the B426 web interface disconnected before a direct Mode 2 session
 
-The monitor does not configure the B426 or the panel. Confirm the B426 address and port through the approved commissioning process before connecting.
+The monitor does not configure the B426 or the panel. Confirm the B426 address and port through the approved commissioning process before connecting. Solution 2000 is the validated development target; Solution 3000 remains a hardware-validation target.
 
 ## Source Installation
 
@@ -84,13 +84,14 @@ Press `Ctrl+C`. The client should cancel polling and close its socket. Verify no
 
 Do not press B426 `Save and Execute`, `Download to Control Panel`, or factory reset controls as a troubleshooting shortcut. Configuration recovery requires an approved maintenance plan and backup.
 
-## Portable Build
+## Compatibility Check Before a Solution 3000 Field Run
 
-Release tooling is under `tools/release/`.
+Do not infer Solution 3000 support from a successful simulator run. Record these gates separately on the actual installation:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\release\build_portable.ps1
-powershell -ExecutionPolicy Bypass -File .\tools\release\smoke_portable.ps1
-```
+1. Mode 2 identity reports model code `0x21`.
+2. Numeric user-code authentication succeeds.
+3. Area and point status load.
+4. History access is tested only with the required authority and panel state.
+5. Live subscription or polling behavior is observed and recorded.
 
-The generated ZIP is placed under `release/windows/` and is intentionally ignored by Git. Keep release packages outside the source tree when possible.
+Until these gates pass, describe the installation as **untested Solution 3000 compatibility**, not validated support.

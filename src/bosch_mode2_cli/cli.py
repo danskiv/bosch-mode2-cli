@@ -527,7 +527,7 @@ async def cmd_simulate(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="bosch-mode2",
-        description="CLI monitoring tool for Bosch Solution 2000 Intrusion Alarm via Mode 2 Protocol",
+        description="CLI monitoring tool for Bosch Solution 2000/3000 intrusion alarms via Mode 2 Protocol",
     )
     parser.add_argument(
         "-v", "--version", action="version", version=f"%(prog)s {__version__}"
