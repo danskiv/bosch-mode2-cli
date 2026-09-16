@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bosch-mode2-cli"
-version = "0.1.0"
+dynamic = ["version"]
 description = "CLI monitoring application for Bosch Solution 2000 Intrusion Alarm via Mode 2 Automation Protocol"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -25,6 +25,9 @@ dev = [
 
 [project.scripts]
 bosch-mode2 = "bosch_mode2_cli.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "bosch_mode2_cli.__version__" }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

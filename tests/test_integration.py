@@ -11,7 +11,9 @@ async def test_client_connect_and_snapshot():
     sim = BoschSol2000Simulator(host="127.0.0.1", port=port, user_pin=pin)
     await sim.start()
 
-    client = BoschSol2000Client(host="127.0.0.1", port=port, user_pin=pin)
+    client = BoschSol2000Client(
+        host="127.0.0.1", port=port, user_pin=pin, use_ssl=False
+    )
 
     try:
         await client.connect(load_history=True)

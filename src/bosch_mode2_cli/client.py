@@ -58,7 +58,7 @@ class BoschSol2000Client:
         host: str,
         port: int = 7700,
         user_pin: str = "1234",
-        use_ssl: bool = False,
+        use_ssl: bool = True,
     ) -> None:
         self.host = host
         self.port = port
@@ -70,7 +70,7 @@ class BoschSol2000Client:
             ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
-            ctx.set_ciphers("DEFAULT")
+            ctx.set_ciphers("DEFAULT:@SECLEVEL=0")
             panel_module.ssl_context = ctx
         else:
             panel_module.ssl_context = None

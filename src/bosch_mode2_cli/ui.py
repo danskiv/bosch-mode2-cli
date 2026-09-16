@@ -22,9 +22,9 @@ from bosch_mode2_cli.models import (
 def render_header(snapshot: PanelSnapshot) -> Panel:
     """Render the top header banner."""
     status_text = (
-        "[bold green]● ONLINE[/]"
+        "[bold green]ONLINE[/]"
         if snapshot.connected
-        else "[bold red]○ DISCONNECTED[/]"
+        else "[bold red]DISCONNECTED[/]"
     )
     title_text = (
         f"[bold white]BOSCH INTRUSION ALARM — MODE 2 MONITOR[/] | {status_text}"

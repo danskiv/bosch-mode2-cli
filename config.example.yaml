@@ -1,14 +1,19 @@
 # Bosch Solution 2000 Mode 2 Monitor Configuration
 panel:
   # Host IP or hostname of B426 / B426-M Ethernet module
-  host: "192.168.1.50"
+  host: "192.168.20.151"
   
   # Default Automation Port for Bosch Mode 2 is 7700
   port: 7700
 
-  # User PIN Code for Solution 2000 (Numeric digits, 4 to 8 characters)
-  # NOTE: To read History Events, this user PIN must have "Master Code Functions" authority in A-Link Plus.
-  user_pin: "1234"
+  # The CLI displays and stores this User Code, as requested for the local Windows tool.
+  # NOTE: To read History Events, this user code must have "Master Code Functions" authority in A-Link Plus.
+  user_code: ""
+
+  # B426 normally exposes Mode 2 through TLS on port 7700.
+  # Set false only for the local simulator or explicitly enabled Legacy TCP mode.
+  use_tls: true
+
 
 monitor:
   # Polling interval in seconds (default: 1.0)

@@ -125,10 +125,9 @@ Byte 3..N: Response Data Payload
 
 ### 4.2 Authentication on Solution 2000 (`CMD_LOGIN_REMOTE_USER - 0x3E`)
 * Solution 2000 encodes the user PIN as 4 bytes in BCD/Hex padded with `0xF`.
-* **Example PIN `1234`:**
-  * Padded string: `"1234FFFF"`
-  * Converted to 4 bytes: `0x12 0x34 0xFF 0xFF`
-  * Complete TX Frame: `01 05 3E 12 34 FF FF`
+* **Illustrative local PIN:** use a locally entered numeric PIN; do not place a real PIN in documentation, source, or command history.
+  * The implementation pads the entered value with `F` nibbles to four bytes.
+  * Complete TX Frame shape: `01 05 3E <4-byte padded PIN>`
 * **Response:**
   * Success: `01 01 FC` (`RSP_ACK`)
   * Failed: `01 02 FD 04` (`RSP_NACK` - Unauthorized)

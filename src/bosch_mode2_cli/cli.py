@@ -15,6 +15,7 @@ from rich.live import Live
 
 from bosch_mode2_cli import __version__
 from bosch_mode2_cli.client import BoschSol2000Client
+
 from bosch_mode2_cli.history import (
     create_transactions_table,
     export_transactions_csv,
@@ -34,21 +35,146 @@ from bosch_mode2_cli.ui import (
     render_raw_exchange_table,
 )
 
-console = Console()
+# Ensure UTF-8 output on Windows consoles
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+console = Console(legacy_windows=False)
+
+
+def default_config_path() -> Path:
+    """Return a per-user config path, outside the repository."""
+    if sys.platform == "win32":
+        root = os.getenv("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+        return Path(root) / "bosch-mode2-cli" / "config.yaml"
+    root = os.getenv("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(root) / "bosch-mode2-cli" / "config.yaml"
+
+
+def save_panel_config(path: Path, host: str, port: int, user_code: str) -> None:
+    """Persist the user-approved B426 connection settings."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing: Dict[str, Any] = {}
+    if path.is_file():
+        try:
+            existing = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            existing = {}
+    panel = existing.setdefault("panel", {})
+    panel.pop("user_pin", None)
+    panel["host"] = host
+    panel["port"] = port
+    panel["user_code"] = str(user_code)
+    path.write_text(
+        yaml.safe_dump(existing, sort_keys=False),
+        encoding="utf-8",
+    )
+
+
+def resolve_panel_settings(
+    host_override: Optional[str],
+    port_override: Optional[int],
+    code_override: Optional[str],
+    cfg: Dict[str, Any],
+    *,
+    config_path: Optional[Path] = None,
+ ) -> tuple[str, int, str]:
+    """Prompt for IP, port, and visible code, using saved values as defaults."""
+    panel_cfg = cfg.setdefault("panel", {})
+    saved_host = panel_cfg.get("host")
+    saved_port = panel_cfg.get("port")
+    saved_code = panel_cfg.get("user_code") or panel_cfg.get("user_pin")
+    host = host_override or saved_host
+    port = port_override or saved_port
+    user_code = code_override or saved_code
+
+    if sys.stdin.isatty():
+        console.print("[bold cyan]B426 connection setup[/]")
+        host_prompt = saved_host or "192.168.20.151"
+        port_prompt = saved_port or 7700
+        code_prompt = saved_code or ""
+        if host_override is None:
+            host = input(f"B426 IP address [{host_prompt}]: ").strip() or host_prompt
+        if port_override is None:
+            raw_port = input(f"Port [{port_prompt}]: ").strip() or str(port_prompt)
+            try:
+                port = int(raw_port)
+            except ValueError as exc:
+                raise ValueError("Port must be a number") from exc
+        if code_override is None:
+            user_code = input(f"Code [{code_prompt}]: ").strip() or code_prompt
+
+    if host is None or port is None or not user_code:
+        raise ValueError("IP address, port, and code are required; run this command in a local terminal")
+
+    if not str(host).strip():
+        raise ValueError("IP address/hostname cannot be empty")
+    try:
+        port = int(port)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Port must be a number") from exc
+    if not 1 <= port <= 65535:
+        raise ValueError("Port must be between 1 and 65535")
+
+    user_code = str(user_code).strip()
+    if not user_code.isnumeric() or not 1 <= len(user_code) <= 8:
+        raise ValueError("Code must contain 1 to 8 numeric digits")
+    changed = (
+        panel_cfg.get("host") != str(host).strip()
+        or panel_cfg.get("port") != port
+        or panel_cfg.get("user_code") != user_code
+    )
+    panel_cfg["host"] = str(host).strip()
+    panel_cfg["port"] = port
+    panel_cfg["user_code"] = user_code
+    if changed and config_path is not None:
+        save_panel_config(config_path, panel_cfg["host"], port, user_code)
+        console.print(f"[green]Connection saved:[/] {panel_cfg['host']}:{port}")
+    return panel_cfg["host"], port, user_code
+
+
+def _use_tls(args: argparse.Namespace, panel_cfg: Dict[str, Any]) -> bool:
+    """Use TLS by default for physical B426 modules; allow explicit plain TCP."""
+    if getattr(args, "no_tls", False):
+        return False
+    return bool(panel_cfg.get("use_tls", True))
+
+
+def _resolve_panel_for_command(args: argparse.Namespace, cfg: Dict[str, Any]) -> tuple[str, int, str]:
+    config_path = cfg.get("__config_path")
+    return resolve_panel_settings(
+        getattr(args, "host", None),
+        getattr(args, "port", None),
+        getattr(args, "pin", None),
+        cfg,
+        config_path=Path(config_path) if config_path else None,
+    )
+
+def _add_transport_option(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--no-tls",
+        action="store_true",
+        help="Use plain TCP (local simulator or B426 Legacy TCP mode only)",
+    )
 
 
 def load_config(config_path: Optional[str]) -> Dict[str, Any]:
     """Load configuration from YAML file if available."""
-    target_path = config_path or "config.yaml"
+    target_path = Path(config_path) if config_path else default_config_path()
     p = Path(target_path)
     if p.is_file():
         try:
             with open(p, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
+                data["__config_path"] = str(p)
                 return data
         except Exception as e:
             console.print(f"[yellow]Warning: Could not read config file {p}: {e}[/]")
-    return {}
+    return {"__config_path": str(p)}
 
 
 async def cmd_monitor(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
@@ -56,14 +182,18 @@ async def cmd_monitor(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
     panel_cfg = cfg.get("panel", {})
     monitor_cfg = cfg.get("monitor", {})
 
-    host = args.host or panel_cfg.get("host", "127.0.0.1")
-    port = args.port or panel_cfg.get("port", 7700)
-    user_pin = args.pin or panel_cfg.get("user_pin", "1234")
+    host, port, user_code = _resolve_panel_for_command(args, cfg)
+    user_pin = user_code
     plain_mode = args.plain or monitor_cfg.get("mode") == "plain"
     poll_interval = args.interval or monitor_cfg.get("poll_interval", 1.0)
     load_history = not args.no_history
 
-    client = BoschSol2000Client(host=host, port=port, user_pin=user_pin)
+    client = BoschSol2000Client(
+        host=host,
+        port=port,
+        user_pin=user_pin,
+        use_ssl=_use_tls(args, panel_cfg),
+    )
 
     if plain_mode:
         console.print(
@@ -91,8 +221,17 @@ async def cmd_monitor(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
             await client.connect(load_history=load_history)
             while True:
                 await asyncio.sleep(poll_interval)
+        except PermissionError:
+            console.print(
+                "[bold red]Authentication rejected by the panel.[/] "
+                "The network/TLS/identity layers succeeded, but the User PIN was not accepted."
+            )
+            return 2
         except (KeyboardInterrupt, asyncio.CancelledError):
             console.print("\n[yellow]Stopping monitor...[/]")
+        except Exception as exc:
+            console.print(f"[bold red]Monitor connection failed:[/] {exc}")
+            return 1
         finally:
             await client.disconnect()
         return 0
@@ -130,11 +269,15 @@ async def cmd_monitor(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
 async def cmd_history(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
     """Fetch history / transaction log."""
     panel_cfg = cfg.get("panel", {})
-    host = args.host or panel_cfg.get("host", "127.0.0.1")
-    port = args.port or panel_cfg.get("port", 7700)
-    user_pin = args.pin or panel_cfg.get("user_pin", "1234")
+    host, port, user_code = _resolve_panel_for_command(args, cfg)
+    user_pin = user_code
 
-    client = BoschSol2000Client(host=host, port=port, user_pin=user_pin)
+    client = BoschSol2000Client(
+        host=host,
+        port=port,
+        user_pin=user_pin,
+        use_ssl=_use_tls(args, panel_cfg),
+    )
     console.print(f"[bold cyan]Querying history from {host}:{port}...[/]")
 
     try:
@@ -177,11 +320,15 @@ async def cmd_history(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
 async def cmd_status(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
     """One-shot query of panel snapshot."""
     panel_cfg = cfg.get("panel", {})
-    host = args.host or panel_cfg.get("host", "127.0.0.1")
-    port = args.port or panel_cfg.get("port", 7700)
-    user_pin = args.pin or panel_cfg.get("user_pin", "1234")
+    host, port, user_code = _resolve_panel_for_command(args, cfg)
+    user_pin = user_code
 
-    client = BoschSol2000Client(host=host, port=port, user_pin=user_pin)
+    client = BoschSol2000Client(
+        host=host,
+        port=port,
+        user_pin=user_pin,
+        use_ssl=_use_tls(args, panel_cfg),
+    )
     console.print(f"[bold cyan]Connecting to {host}:{port}...[/]")
 
     try:
@@ -208,9 +355,8 @@ async def cmd_status(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
 async def cmd_raw(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
     """Read and display raw Mode 2 protocol frames and packets."""
     panel_cfg = cfg.get("panel", {})
-    host = args.host or panel_cfg.get("host", "127.0.0.1")
-    port = args.port or panel_cfg.get("port", 7700)
-    user_pin = args.pin or panel_cfg.get("user_pin", "1234")
+    host, port, user_code = _resolve_panel_for_command(args, cfg)
+    user_pin = user_code
 
     raw_client = RawMode2Client(host=host, port=port)
     console.print(f"[bold cyan]Connecting raw socket to {host}:{port}...[/]")
@@ -223,7 +369,7 @@ async def cmd_raw(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
     try:
         if args.mode == "sniff":
             console.print(
-                f"[bold green]✓ Sniffing live raw Mode 2 frames on {host}:{port}...[/]"
+                f"[bold green][+] Sniffing live raw Mode 2 frames on {host}:{port}...[/]"
             )
             console.print("[dim]Press Ctrl+C to stop listening.[/]\n")
             raw_client.on_frame = lambda f: console.print(format_raw_frame_line(f))
@@ -231,7 +377,7 @@ async def cmd_raw(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
         else:
             # Mode: dump
             console.print(
-                f"[bold green]✓ Executing full raw Mode 2 diagnostic sequence against {host}:{port}...[/]\n"
+                f"[bold green][+] Executing full raw Mode 2 diagnostic sequence against {host}:{port}...[/]\n"
             )
             pairs = await raw_client.execute_full_diagnostic_dump(user_pin=user_pin)
 
@@ -281,7 +427,7 @@ async def cmd_simulate(args: argparse.Namespace) -> int:
     await sim.start()
 
     console.print(
-        f"[bold green]✓ Bosch Solution 2000 Simulator is running on {host}:{port}[/]"
+        f"[bold green][+] Bosch Solution 2000 Simulator is running on {host}:{port}[/]"
     )
     console.print(f"[cyan]Accepted User PIN:[/] [bold]{user_pin}[/]")
     console.print(
@@ -396,12 +542,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_mon = subparsers.add_parser("monitor", help="Live monitor dashboard and event stream")
     p_mon.add_argument("--host", help="Panel IP address / hostname")
     p_mon.add_argument("-p", "--port", type=int, help="Panel Mode 2 port (default: 7700)")
-    p_mon.add_argument("--pin", help="User PIN code (e.g. 1234)")
+    p_mon.add_argument("--pin", help="User code override; normally entered in the setup prompt")
     p_mon.add_argument("--plain", action="store_true", help="Plain text stream instead of TUI")
     p_mon.add_argument("--interval", type=float, help="Polling interval in seconds")
     p_mon.add_argument(
         "--no-history", action="store_true", help="Do not load history log on initial connect"
     )
+    _add_transport_option(p_mon)
 
     # Command: history
     p_hist = subparsers.add_parser("history", help="Fetch panel history transactions")
@@ -418,12 +565,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Filter by category",
     )
     p_hist.add_argument("--search", help="Filter by substring")
+    _add_transport_option(p_hist)
 
     # Command: status
     p_stat = subparsers.add_parser("status", help="Get snapshot of panel status")
     p_stat.add_argument("--host", help="Panel IP address / hostname")
     p_stat.add_argument("-p", "--port", type=int, help="Panel Mode 2 port")
     p_stat.add_argument("--pin", help="User PIN code")
+    _add_transport_option(p_stat)
 
     # Command: raw
     p_raw = subparsers.add_parser("raw", help="Inspect and display raw Mode 2 protocol packets")
@@ -482,6 +631,9 @@ def main() -> None:
     try:
         code = asyncio.run(main_async(args, cfg))
         sys.exit(code)
+    except ValueError as exc:
+        console.print(f"[bold red]Input error:[/] {exc}")
+        sys.exit(2)
     except KeyboardInterrupt:
         sys.exit(0)
 
