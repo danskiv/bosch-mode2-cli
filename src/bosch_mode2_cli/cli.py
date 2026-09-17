@@ -74,8 +74,11 @@ def build_telegram_notifier(
     settings = ZoneSettings(zones_cfg, on_change=on_change)
     notifier = AlarmRestoreNotifier(panel_name, telegram.send, settings=settings)
     allowed = {int(value) for value in (telegram_cfg.get("allowed_chat_ids") or [])}
+    allowed_users = {int(value) for value in (telegram_cfg.get("allowed_user_ids") or [])}
     notifier.telegram_api = telegram
-    notifier.telegram_controller = TelegramBotController(settings, allowed, telegram.send_chat)
+    notifier.telegram_controller = TelegramBotController(
+        settings, allowed, telegram.send_chat, telegram.answer_callback, allowed_users
+    )
     return notifier
 
 
@@ -277,6 +280,10 @@ async def cmd_monitor(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
             poll_stop,
         )
         poll_thread = threading.Thread(target=poller.run, name="telegram-control", daemon=True)
+        try:
+            telegram_notifier.telegram_api.set_my_commands()
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Telegram menu registration failed: %s", exc)
         poll_thread.start()
 
     def on_transaction(rec):
@@ -313,6 +320,7 @@ async def cmd_monitor(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
         try:
             await client.connect(load_history=load_history)
             if telegram_notifier:
+                telegram_notifier.settings.register_zone_ids(client.get_snapshot().points.keys())
                 telegram_notifier.prime(client.transactions)
                 telegram_notifier.panel_name = client.get_snapshot().model_name
                 notifications_ready = True
@@ -340,6 +348,7 @@ async def cmd_monitor(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
         await client.connect(load_history=load_history)
         snapshot = client.get_snapshot()
         if telegram_notifier:
+            telegram_notifier.settings.register_zone_ids(snapshot.points.keys())
             telegram_notifier.prime(client.transactions)
             telegram_notifier.panel_name = snapshot.model_name
             notifications_ready = True

@@ -78,6 +78,9 @@ The monitor is hybrid rather than universally push-realtime:
 - Telegram delivery is synchronous in this MVP. A request failure is logged and does not terminate the panel monitor; there is no persistent queue or retry after restart yet.
 - The notifier deduplicates event IDs in memory for the current process only.
 - The Telegram bot can change notification-only zone settings (`/zones`, `/zone_on`, `/zone_off`, `/zone_name`, `/settings`, `/status`, `/test_notification`, `/help`). Commands require an allowlisted chat ID and cannot control the panel.
+- Telegram registers a command menu and supports inline-keyboard navigation via `/menu`; callbacks and rename text use the same allowlisted chat authorization as commands.
+- Private chats use `allowed_chat_ids`; group/supergroup chats additionally require the sender user ID in `allowed_user_ids`.
+- Panel-discovered point IDs seed the local notification-zone catalog without changing the CLI/dashboard point view.
 - Zone settings are persisted in local YAML and apply to the next event; CLI/dashboard output is unaffected.
 - The CLI does not generate siren sounds or act as a monitoring-center alarm path. Telegram is a convenience notification only.
 

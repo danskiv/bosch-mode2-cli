@@ -82,7 +82,9 @@ The bot can manage notification settings only:
 /help
 ```
 
-Set `notifications.telegram.allowed_chat_ids` in the local YAML configuration. Only those chat IDs can change zone notification settings. The commands do not control the panel, and CLI/dashboard output still shows every zone.
+The bot also exposes `/menu` in Telegram's command menu. Select a zone from the inline keyboard to enable, disable, or rename its Telegram notification. The monitor must be running for menu actions to be processed.
+
+Set `notifications.telegram.allowed_chat_ids` in the local YAML configuration. For group/supergroup chats, also set the authorized sender IDs in `allowed_user_ids`. The commands do not control the panel, and CLI/dashboard output still shows every zone.
 
 ## Useful Commands
 

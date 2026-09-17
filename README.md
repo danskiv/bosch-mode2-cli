@@ -139,6 +139,8 @@ Allowed commands:
 /help
 ```
 
+The bot also registers a Telegram menu with `/menu`, `/zones`, `/settings`, `/status`, `/test_notification`, and `/help`. `/menu` opens inline buttons; selecting a zone shows ON, OFF, and Rename buttons. Rename asks for the next text message. This menu configures Telegram notifications only and is available for processing only while the monitor laptop is online.
+
 Only chat IDs listed in `notifications.telegram.allowed_chat_ids` may use these commands. Changes apply to the next event and are saved in the local YAML configuration. Configure the allowlist explicitly:
 
 ```yaml
@@ -146,6 +148,8 @@ notifications:
   telegram:
     allowed_chat_ids:
       - 1065735978
+    # Required for authorized members when using a group chat.
+    allowed_user_ids: []
 
 zones:
   "1":

@@ -10,6 +10,7 @@ The project follows [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PAT
 - Align README, architecture, runbook, protocol, and research wording with that boundary.
 - Add optional Telegram notifications for live alarm and restore events, with local environment-based credentials.
 - Add allowlisted Telegram commands for notification-only zone enable/disable and naming.
+- Add Telegram command menu and inline-keyboard zone controls with callback authorization.
 
 ## [0.1.0] - 2026-09-16
 
