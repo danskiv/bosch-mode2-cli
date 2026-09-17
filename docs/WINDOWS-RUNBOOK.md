@@ -69,6 +69,21 @@ $env:TELEGRAM_CHAT_ID = '<chat-id>'
 
 The notifier is disabled by default. It uses in-memory deduplication only; restarting the monitor resets that memory. Telegram is a convenience notification, not a replacement for the panel siren or monitoring center. A failed Telegram request is logged while the panel monitor continues.
 
+The bot can manage notification settings only:
+
+```text
+/zones
+/zone_on <number>
+/zone_off <number>
+/zone_name <number> <name>
+/settings
+/status
+/test_notification
+/help
+```
+
+Set `notifications.telegram.allowed_chat_ids` in the local YAML configuration. Only those chat IDs can change zone notification settings. The commands do not control the panel, and CLI/dashboard output still shows every zone.
+
 ## Useful Commands
 
 ```powershell

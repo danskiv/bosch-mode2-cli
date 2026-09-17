@@ -34,3 +34,9 @@ notifications:
     enabled: false
     bot_token_env: TELEGRAM_BOT_TOKEN
     chat_id_env: TELEGRAM_CHAT_ID
+    # Only these Telegram chats may change notification settings.
+    allowed_chat_ids: []
+
+# Telegram-only notification policy. CLI/dashboard still show every panel zone.
+zones:
+  # "1": {enabled: true, name: "Pintu Depan"}

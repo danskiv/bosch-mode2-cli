@@ -9,6 +9,7 @@ The project follows [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PAT
 - Clarify the evidence boundary: Solution 2000 is the validated development target; Solution 3000 is theoretical compatibility pending physical validation.
 - Align README, architecture, runbook, protocol, and research wording with that boundary.
 - Add optional Telegram notifications for live alarm and restore events, with local environment-based credentials.
+- Add allowlisted Telegram commands for notification-only zone enable/disable and naming.
 
 ## [0.1.0] - 2026-09-16
 

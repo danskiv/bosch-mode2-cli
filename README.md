@@ -122,6 +122,42 @@ $env:TELEGRAM_CHAT_ID = '<chat-id>'
 
 Only live `ALARM` and `RESTORE` events are sent. Each message contains the panel name, zone when available, and panel event time. Initial history is not sent. Telegram is disabled by default, uses in-memory deduplication, and is only a convenience notification—not a replacement for the panel siren or monitoring center. Do not commit the token or chat ID.
 
+## Telegram Zone Settings
+
+The bot can change **Telegram notification policy only**. The CLI and dashboard continue to show every panel zone. The bot cannot arm/disarm the panel, operate outputs, or change B426 settings.
+
+Allowed commands:
+
+```text
+/zones
+/zone_on <number>
+/zone_off <number>
+/zone_name <number> <name>
+/settings
+/status
+/test_notification
+/help
+```
+
+Only chat IDs listed in `notifications.telegram.allowed_chat_ids` may use these commands. Changes apply to the next event and are saved in the local YAML configuration. Configure the allowlist explicitly:
+
+```yaml
+notifications:
+  telegram:
+    allowed_chat_ids:
+      - 1065735978
+
+zones:
+  "1":
+    enabled: true
+    name: "Pintu Depan"
+  "3":
+    enabled: false
+    name: "Kamar Utama"
+```
+
+Do not place the bot token in this YAML file. The token remains in the local environment/secret file used by the launcher.
+
 ## Tests
 
 ```bash

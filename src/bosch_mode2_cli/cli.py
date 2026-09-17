@@ -6,8 +6,9 @@ import logging
 import json
 import os
 import sys
+import threading
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import yaml
 from rich.console import Console
@@ -25,7 +26,13 @@ from bosch_mode2_cli.history import (
 from bosch_mode2_cli.models import EventCategory
 from bosch_mode2_cli.raw_protocol import RawMode2Client
 from bosch_mode2_cli.simulator import BoschSol2000Simulator
-from bosch_mode2_cli.telegram_notifier import AlarmRestoreNotifier, TelegramNotifier
+from bosch_mode2_cli.telegram_notifier import (
+    AlarmRestoreNotifier,
+    TelegramBotController,
+    TelegramNotifier,
+    TelegramControlPoller,
+    ZoneSettings,
+)
 from bosch_mode2_cli.ui import (
     build_dashboard_layout,
     format_plain_transaction,
@@ -48,7 +55,8 @@ console = Console(legacy_windows=False)
 
 
 def build_telegram_notifier(
-    telegram_cfg: Dict[str, Any], panel_name: str
+    telegram_cfg: Dict[str, Any], panel_name: str, config: Optional[Dict[str, Any]] = None,
+    on_change: Optional[Callable[[], None]] = None,
 ) -> Optional[AlarmRestoreNotifier]:
     """Build the optional Telegram notifier from local environment values."""
     if not telegram_cfg.get("enabled", False):
@@ -61,7 +69,13 @@ def build_telegram_notifier(
         )
         return None
     telegram = TelegramNotifier(token=token, chat_id=chat_id)
-    return AlarmRestoreNotifier(panel_name, telegram.send)
+    zones_cfg = (config or {}).get("zones", {})
+    settings = ZoneSettings(zones_cfg, on_change=on_change)
+    notifier = AlarmRestoreNotifier(panel_name, telegram.send, settings=settings)
+    allowed = {int(value) for value in telegram_cfg.get("allowed_chat_ids", [chat_id])}
+    notifier.telegram_api = telegram
+    notifier.telegram_controller = TelegramBotController(settings, allowed, telegram.send_chat)
+    return notifier
 
 
 def default_config_path() -> Path:
@@ -91,6 +105,13 @@ def save_panel_config(path: Path, host: str, port: int, user_code: str) -> None:
         yaml.safe_dump(existing, sort_keys=False),
         encoding="utf-8",
     )
+
+
+def save_runtime_config(path: Path, cfg: Dict[str, Any]) -> None:
+    """Persist non-secret runtime settings, excluding the internal path marker."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {key: value for key, value in cfg.items() if not key.startswith("__")}
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
 
 
 def resolve_panel_settings(
@@ -214,8 +235,24 @@ async def cmd_monitor(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
     )
 
     notifications_cfg = cfg.get("notifications", {}).get("telegram", {})
-    telegram_notifier = build_telegram_notifier(notifications_cfg, "Bosch Solution panel")
+    telegram_notifier = build_telegram_notifier(notifications_cfg, "Bosch Solution panel", cfg)
     notifications_ready = False
+    poll_stop = threading.Event()
+    poll_thread = None
+    if telegram_notifier and telegram_notifier.telegram_api and telegram_notifier.telegram_controller:
+        config_path = Path(cfg["__config_path"])
+        settings = telegram_notifier.telegram_controller.settings
+        settings._on_change = lambda: (
+            cfg.__setitem__("zones", settings.as_dict()),
+            save_runtime_config(config_path, cfg),
+        )[-1]
+        poller = TelegramControlPoller(
+            telegram_notifier.telegram_api,
+            telegram_notifier.telegram_controller,
+            poll_stop,
+        )
+        poll_thread = threading.Thread(target=poller.run, name="telegram-control", daemon=True)
+        poll_thread.start()
 
     def on_transaction(rec):
         nonlocal notifications_ready
@@ -268,6 +305,7 @@ async def cmd_monitor(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
             console.print(f"[bold red]Monitor connection failed:[/] {exc}")
             return 1
         finally:
+            poll_stop.set()
             await client.disconnect()
         return 0
 
@@ -300,6 +338,7 @@ async def cmd_monitor(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
         except (KeyboardInterrupt, asyncio.CancelledError):
             pass
         finally:
+            poll_stop.set()
             await client.disconnect()
 
     return 0
