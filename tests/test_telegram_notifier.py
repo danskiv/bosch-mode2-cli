@@ -6,6 +6,7 @@ from bosch_mode2_cli.telegram_notifier import (
     AlarmRestoreNotifier,
     TelegramNotifier,
     TelegramBotController,
+    TelegramControlPoller,
     ZoneSettings,
     format_telegram_message,
 )
@@ -161,6 +162,54 @@ def test_zone_settings_change_callback_is_called():
 
     assert len(changes) == 2
     assert changes[-1]["3"]["name"] == "Kamar Utama"
+
+
+def test_zone_name_rejects_oversized_input():
+    settings = ZoneSettings()
+
+    try:
+        settings.set_name(3, "x" * 65)
+    except ValueError as exc:
+        assert "64" in str(exc)
+    else:
+        raise AssertionError("oversized zone name was accepted")
+
+
+def test_control_poller_advances_offset_and_honors_stop_event():
+    class StopEvent:
+        def __init__(self):
+            self.stopped = False
+
+        def is_set(self):
+            return self.stopped
+
+        def wait(self, _seconds):
+            self.stopped = True
+
+        def set(self):
+            self.stopped = True
+
+    class Api:
+        def __init__(self, stop_event):
+            self.calls = []
+            self.stop_event = stop_event
+
+        def get_updates(self, offset, timeout):
+            self.calls.append((offset, timeout))
+            self.stop_event.set()
+            return [{"update_id": 7, "message": {"chat": {"id": 1}, "text": "/help"}}]
+
+    replies = []
+    stop_event = StopEvent()
+    api = Api(stop_event)
+    controller = TelegramBotController(ZoneSettings(), {1}, lambda _chat, text: replies.append(text))
+    poller = TelegramControlPoller(api, controller, stop_event)
+
+    poller.run()
+
+    assert api.calls == [(0, 5)]
+    assert poller.offset == 8
+    assert replies and "/zone_on" in replies[0]
 
 
 def test_telegram_notifier_posts_form_encoded_message_without_real_network():

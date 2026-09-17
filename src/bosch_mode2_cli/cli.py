@@ -6,6 +6,7 @@ import logging
 import json
 import os
 import sys
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
@@ -72,7 +73,7 @@ def build_telegram_notifier(
     zones_cfg = (config or {}).get("zones", {})
     settings = ZoneSettings(zones_cfg, on_change=on_change)
     notifier = AlarmRestoreNotifier(panel_name, telegram.send, settings=settings)
-    allowed = {int(value) for value in telegram_cfg.get("allowed_chat_ids", [chat_id])}
+    allowed = {int(value) for value in (telegram_cfg.get("allowed_chat_ids") or [])}
     notifier.telegram_api = telegram
     notifier.telegram_controller = TelegramBotController(settings, allowed, telegram.send_chat)
     return notifier
@@ -111,7 +112,31 @@ def save_runtime_config(path: Path, cfg: Dict[str, Any]) -> None:
     """Persist non-secret runtime settings, excluding the internal path marker."""
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {key: value for key, value in cfg.items() if not key.startswith("__")}
-    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    temporary_path: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(yaml.safe_dump(data, sort_keys=False))
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+def _stop_telegram_poller(stop_event: threading.Event, thread: Optional[threading.Thread]) -> None:
+    stop_event.set()
+    if thread is not None:
+        thread.join(timeout=11)
 
 
 def resolve_panel_settings(
@@ -305,7 +330,7 @@ async def cmd_monitor(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
             console.print(f"[bold red]Monitor connection failed:[/] {exc}")
             return 1
         finally:
-            poll_stop.set()
+            _stop_telegram_poller(poll_stop, poll_thread)
             await client.disconnect()
         return 0
 
@@ -313,33 +338,31 @@ async def cmd_monitor(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
     console.print(f"[bold cyan]Connecting to Bosch Solution 2000 at {host}:{port}...[/]")
     try:
         await client.connect(load_history=load_history)
-    except Exception as e:
-        console.print(f"[bold red]Connection failed:[/] {e}")
-        return 1
+        snapshot = client.get_snapshot()
+        if telegram_notifier:
+            telegram_notifier.prime(client.transactions)
+            telegram_notifier.panel_name = snapshot.model_name
+            notifications_ready = True
 
-    snapshot = client.get_snapshot()
-    if telegram_notifier:
-        telegram_notifier.prime(client.transactions)
-        telegram_notifier.panel_name = snapshot.model_name
-        notifications_ready = True
-
-    with Live(
-        build_dashboard_layout(snapshot, client.transactions),
-        refresh_per_second=4,
-        screen=True,
-    ) as live:
-        try:
+        with Live(
+            build_dashboard_layout(snapshot, client.transactions),
+            refresh_per_second=4,
+            screen=True,
+        ) as live:
             while True:
                 await asyncio.sleep(poll_interval)
                 cur_snapshot = client.get_snapshot()
                 live.update(
                     build_dashboard_layout(cur_snapshot, client.transactions)
                 )
-        except (KeyboardInterrupt, asyncio.CancelledError):
-            pass
-        finally:
-            poll_stop.set()
-            await client.disconnect()
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        pass
+    except Exception as exc:
+        console.print(f"[bold red]Connection failed:[/] {exc}")
+        return 1
+    finally:
+        _stop_telegram_poller(poll_stop, poll_thread)
+        await client.disconnect()
 
     return 0
 

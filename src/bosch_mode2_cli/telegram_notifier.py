@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -12,6 +12,7 @@ from bosch_mode2_cli.models import EventCategory, TransactionRecord
 
 _ZONE_PATTERN = re.compile(r"\b(?:ZONE|POINT)\s+(\d+)(?:\s*\(([^)]+)\))?", re.IGNORECASE)
 _POINT_PATTERN = re.compile(r"\bPOINT\s*:\s*(\d+)", re.IGNORECASE)
+_MAX_ZONE_NAME_LENGTH = 64
 
 
 def _zone_id(message: str) -> int | None:
@@ -81,6 +82,8 @@ class ZoneSettings:
         clean = name.strip()
         if not clean:
             raise ValueError("Zone name cannot be empty")
+        if len(clean) > _MAX_ZONE_NAME_LENGTH:
+            raise ValueError(f"Zone name cannot exceed {_MAX_ZONE_NAME_LENGTH} characters")
         self._entry(zone_id)["name"] = clean
         if self._on_change:
             self._on_change()
@@ -187,10 +190,15 @@ class TelegramNotifier:
         return list(result.get("result", []))
 
 
+class TelegramUpdatesAPI(Protocol):
+    def get_updates(self, offset: int = 0, timeout: int = 10) -> list[dict[str, Any]]:
+        ...
+
+
 class TelegramControlPoller:
     """Background long-poll loop for Telegram-only configuration commands."""
 
-    def __init__(self, api: TelegramNotifier, controller: TelegramBotController, stop_event: Any) -> None:
+    def __init__(self, api: TelegramUpdatesAPI, controller: TelegramBotController, stop_event: Any) -> None:
         self.api = api
         self.controller = controller
         self.stop_event = stop_event

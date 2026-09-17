@@ -8,6 +8,8 @@ from bosch_mode2_cli.cli import (
     cmd_history,
     resolve_panel_settings,
     save_panel_config,
+    save_runtime_config,
+    _stop_telegram_poller,
 )
 from bosch_mode2_cli.cli import build_telegram_notifier
 from bosch_mode2_cli.telegram_notifier import AlarmRestoreNotifier
@@ -36,6 +38,66 @@ def test_telegram_notifications_require_explicit_enable_and_environment(monkeypa
     )
 
     assert isinstance(notifier, AlarmRestoreNotifier)
+
+
+def test_telegram_commands_require_explicit_allowlist(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
+
+    notifier = build_telegram_notifier({"enabled": True}, "Solution 2000")
+
+    assert notifier is not None
+    assert notifier.telegram_controller is not None
+    assert notifier.telegram_controller.allowed_chat_ids == set()
+
+
+def test_telegram_allowlist_accepts_null_as_empty(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
+
+    notifier = build_telegram_notifier(
+        {"enabled": True, "allowed_chat_ids": None}, "Solution 2000"
+    )
+
+    assert notifier is not None
+    assert notifier.telegram_controller is not None
+    assert notifier.telegram_controller.allowed_chat_ids == set()
+
+
+def test_save_runtime_config_excludes_internal_path_marker(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    save_runtime_config(
+        config_path,
+        {"__config_path": str(config_path), "zones": {"3": {"enabled": False}}},
+    )
+
+    text = config_path.read_text(encoding="utf-8")
+    assert "__config_path" not in text
+    assert "enabled: false" in text
+
+
+def test_stop_telegram_poller_sets_event_and_joins_thread():
+    class StopEvent:
+        def __init__(self):
+            self.was_set = False
+
+        def set(self):
+            self.was_set = True
+
+    class Thread:
+        def __init__(self):
+            self.timeout = None
+
+        def join(self, timeout):
+            self.timeout = timeout
+
+    stop_event = StopEvent()
+    thread = Thread()
+
+    _stop_telegram_poller(stop_event, thread)
+
+    assert stop_event.was_set is True
+    assert thread.timeout == 11
 
 
 def test_cli_parser():
