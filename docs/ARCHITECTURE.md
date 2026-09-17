@@ -14,6 +14,7 @@ The project is an engineering companion, not a replacement for the Bosch panel, 
 CLI (`cli.py`)
   ├── configuration wizard: B426 IP, port, visible user code
   ├── monitor/status/history/raw/simulate commands
+  ├── optional Telegram alarm/restore notifier
   └── Rich TUI or plain-text output
         │
         ▼
@@ -46,6 +47,7 @@ Solution 2000/3000 panel
 | `models.py` | Typed records for panel snapshots, areas, points, and transactions |
 | `raw_protocol.py` | Mode 2 frame parser, frame builder, raw client, diagnostic exchanges |
 | `simulator.py` | Local Solution 2000-compatible test server and event generator; not a Solution 3000 test harness |
+| `telegram_notifier.py` | Optional live ALARM/RESTORE filtering, message formatting, and Telegram Bot API delivery |
 | `ui.py` | Rich tables, dashboard layout, and plain event formatting |
 
 ## Connection Flow
@@ -71,8 +73,11 @@ The monitor is hybrid rather than universally push-realtime:
 - the upstream library can process subscription/event callbacks where the panel supports them;
 - the client also refreshes panel status approximately every second;
 - history retrieval is a query operation and may depend on panel state and user authority;
-- the CLI has no siren, audio, toast, Telegram, or WhatsApp notification output;
-- the panel remains responsible for alarm signaling.
+- The optional Telegram notifier receives only live `ALARM` and `RESTORE` transactions; initial history is used as a baseline and is not sent.
+- Telegram is disabled unless `notifications.telegram.enabled` is true and both configured environment variables exist.
+- Telegram delivery is synchronous in this MVP. A request failure is logged and does not terminate the panel monitor; there is no persistent queue or retry after restart yet.
+- The notifier deduplicates event IDs in memory for the current process only.
+- The CLI does not generate siren sounds or act as a monitoring-center alarm path. Telegram is a convenience notification only.
 
 A displayed event is evidence that the panel/client path delivered that event. It is not proof that the laptop generated or controlled a siren.
 

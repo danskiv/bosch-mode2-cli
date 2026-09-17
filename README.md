@@ -15,11 +15,12 @@ The application can display panel identity, areas, points/zones, faults, event h
 - Run a local Solution 2000 simulator for development and tests. The simulator is not a Solution 3000 validation tool.
 - Use TLS by default for the observed B426 field transport, with explicit plain-TCP override where appropriate.
 - Configure B426 IP, port, and visible user code through a local wizard.
+- Optionally send live `ALARM` and `RESTORE` notifications to Telegram.
 
 ## Important Boundaries
 
 - The normal monitor path is read-oriented.
-- The CLI does not generate siren sounds or Windows/Telegram/WhatsApp notifications.
+- The CLI does not generate siren sounds or act as a monitoring-center alarm path. Optional Telegram messages are a convenience notification only.
 - The application does not silently scan for another IP. If B426 receives a new address, enter it at the next wizard prompt.
 - Close A-Link Plus, the B426 web UI, and other competing clients before a direct Mode 2 session.
 - Do not use factory reset, `Save and Execute`, or `Download to Control Panel` as troubleshooting shortcuts.
@@ -99,6 +100,27 @@ bosch-mode2 monitor --host 127.0.0.1 --port 17700 --pin LOCAL_TEST_CODE --no-tls
 ```
 
 Replace placeholders locally. Do not paste production codes into chat, documentation, or shell history.
+
+## Optional Telegram Notifications
+
+Enable the simple Telegram MVP in the local configuration file:
+
+```yaml
+notifications:
+  telegram:
+    enabled: true
+    bot_token_env: TELEGRAM_BOT_TOKEN
+    chat_id_env: TELEGRAM_CHAT_ID
+```
+
+Set the environment values locally before starting the monitor:
+
+```powershell
+$env:TELEGRAM_BOT_TOKEN = '<bot-token>'
+$env:TELEGRAM_CHAT_ID = '<chat-id>'
+```
+
+Only live `ALARM` and `RESTORE` events are sent. Each message contains the panel name, zone when available, and panel event time. Initial history is not sent. Telegram is disabled by default, uses in-memory deduplication, and is only a convenience notification—not a replacement for the panel siren or monitoring center. Do not commit the token or chat ID.
 
 ## Tests
 

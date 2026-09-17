@@ -9,11 +9,33 @@ from bosch_mode2_cli.cli import (
     resolve_panel_settings,
     save_panel_config,
 )
+from bosch_mode2_cli.cli import build_telegram_notifier
+from bosch_mode2_cli.telegram_notifier import AlarmRestoreNotifier
 from bosch_mode2_cli.simulator import BoschSol2000Simulator
 
 
 def test_version_is_consistent_with_package_metadata():
     assert importlib.metadata.version("bosch-mode2-cli") == __version__
+
+
+def test_telegram_notifications_are_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+
+    notifier = build_telegram_notifier({}, "Solution 2000")
+
+    assert notifier is None
+
+
+def test_telegram_notifications_require_explicit_enable_and_environment(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
+
+    notifier = build_telegram_notifier(
+        {"enabled": True}, "Solution 2000"
+    )
+
+    assert isinstance(notifier, AlarmRestoreNotifier)
 
 
 def test_cli_parser():

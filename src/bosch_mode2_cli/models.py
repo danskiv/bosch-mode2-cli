@@ -18,7 +18,7 @@ class EventCategory(str, Enum):
 def categorize_event(message: str) -> EventCategory:
     """Categorize Bosch event message into standard security classifications."""
     msg = message.upper()
-    if "RESTORE" in msg:
+    if "RESTORE" in msg or "RESTORAL" in msg:
         return EventCategory.RESTORE
     if any(k in msg for k in ["AWAY ARM", "STAY1 ARM", "STAY2 ARM", "DISARM", "ARMED", "DISARMED"]):
         return EventCategory.ARM_DISARM

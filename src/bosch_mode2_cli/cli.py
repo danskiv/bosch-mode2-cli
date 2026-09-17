@@ -25,6 +25,7 @@ from bosch_mode2_cli.history import (
 from bosch_mode2_cli.models import EventCategory
 from bosch_mode2_cli.raw_protocol import RawMode2Client
 from bosch_mode2_cli.simulator import BoschSol2000Simulator
+from bosch_mode2_cli.telegram_notifier import AlarmRestoreNotifier, TelegramNotifier
 from bosch_mode2_cli.ui import (
     build_dashboard_layout,
     format_plain_transaction,
@@ -44,6 +45,23 @@ if sys.platform == "win32":
         pass
 
 console = Console(legacy_windows=False)
+
+
+def build_telegram_notifier(
+    telegram_cfg: Dict[str, Any], panel_name: str
+) -> Optional[AlarmRestoreNotifier]:
+    """Build the optional Telegram notifier from local environment values."""
+    if not telegram_cfg.get("enabled", False):
+        return None
+    token = os.getenv(telegram_cfg.get("bot_token_env", "TELEGRAM_BOT_TOKEN"), "")
+    chat_id = os.getenv(telegram_cfg.get("chat_id_env", "TELEGRAM_CHAT_ID"), "")
+    if not token or not chat_id:
+        console.print(
+            "[yellow]Telegram notifications disabled: environment values are missing.[/]"
+        )
+        return None
+    telegram = TelegramNotifier(token=token, chat_id=chat_id)
+    return AlarmRestoreNotifier(panel_name, telegram.send)
 
 
 def default_config_path() -> Path:
@@ -195,13 +213,26 @@ async def cmd_monitor(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
         use_ssl=_use_tls(args, panel_cfg),
     )
 
+    notifications_cfg = cfg.get("notifications", {}).get("telegram", {})
+    telegram_notifier = build_telegram_notifier(notifications_cfg, "Bosch Solution panel")
+    notifications_ready = False
+
+    def on_transaction(rec):
+        nonlocal notifications_ready
+        if plain_mode:
+            console.print(format_plain_transaction(rec))
+        if telegram_notifier and notifications_ready:
+            try:
+                telegram_notifier.process(rec)
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Telegram notification failed: %s", exc)
+
+    client.on_transaction = on_transaction
+
     if plain_mode:
         console.print(
             f"[bold blue]Starting plain-text Mode 2 stream for Bosch Sol2000 at {host}:{port}...[/]"
         )
-
-        def on_plain_tx(rec):
-            console.print(format_plain_transaction(rec))
 
         def on_point(pt):
             console.print(
@@ -213,12 +244,16 @@ async def cmd_monitor(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
                 f"[dim]{ar.last_updated.strftime('%H:%M:%S')}[/] [magenta]Area {ar.id} ({ar.name}):[/] {ar.status_text}"
             )
 
-        client.on_transaction = on_plain_tx
+        client.on_transaction = on_transaction
         client.on_point_update = on_point
         client.on_area_update = on_area
 
         try:
             await client.connect(load_history=load_history)
+            if telegram_notifier:
+                telegram_notifier.prime(client.transactions)
+                telegram_notifier.panel_name = client.get_snapshot().model_name
+                notifications_ready = True
             while True:
                 await asyncio.sleep(poll_interval)
         except PermissionError:
@@ -245,6 +280,10 @@ async def cmd_monitor(args: argparse.Namespace, cfg: Dict[str, Any]) -> int:
         return 1
 
     snapshot = client.get_snapshot()
+    if telegram_notifier:
+        telegram_notifier.prime(client.transactions)
+        telegram_notifier.panel_name = snapshot.model_name
+        notifications_ready = True
 
     with Live(
         build_dashboard_layout(snapshot, client.transactions),

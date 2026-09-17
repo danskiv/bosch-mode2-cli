@@ -46,6 +46,29 @@ On first use, enter all three values. On later runs, press Enter to retain a val
 
 The code is intentionally visible and persisted in the local configuration because this is the approved local Windows workflow. Protect the laptop and configuration file accordingly.
 
+## Optional Telegram Notifications
+
+The MVP can send a short Telegram message for live `ALARM` and `RESTORE` events. Each message contains the panel model, zone label when present, and the panel event time. Initial history is not sent.
+
+Add this to the local configuration file, or copy the same section from `config.example.yaml`:
+
+```yaml
+notifications:
+  telegram:
+    enabled: true
+    bot_token_env: TELEGRAM_BOT_TOKEN
+    chat_id_env: TELEGRAM_CHAT_ID
+```
+
+Set the two values locally in PowerShell. Do not put them in the repository, screenshots, or chat:
+
+```powershell
+$env:TELEGRAM_BOT_TOKEN = '<bot-token>'
+$env:TELEGRAM_CHAT_ID = '<chat-id>'
+```
+
+The notifier is disabled by default. It uses in-memory deduplication only; restarting the monitor resets that memory. Telegram is a convenience notification, not a replacement for the panel siren or monitoring center. A failed Telegram request is logged while the panel monitor continues.
+
 ## Useful Commands
 
 ```powershell

@@ -27,3 +27,10 @@ monitor:
 
   # Output mode: "tui" (Rich interactive dashboard) or "plain" (streaming log lines)
   mode: "tui"
+
+notifications:
+  telegram:
+    # Keep false until the local environment values are ready.
+    enabled: false
+    bot_token_env: TELEGRAM_BOT_TOKEN
+    chat_id_env: TELEGRAM_CHAT_ID
